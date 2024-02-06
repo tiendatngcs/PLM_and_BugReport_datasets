@@ -10,6 +10,8 @@ from numpy.linalg import norm
 import sys
 from itertools import combinations
 import random
+import re
+import string
 
 table_names = [
     "spark",
@@ -58,8 +60,9 @@ class UnionFind:
                 self.parent[root_y] = root_x
                 self.ranks[root_x] += self.ranks[root_y]
             
-    def process_project(self, conn, project_name, column_names):
+    def process_project(self, conn, project_name, min_desc_length=50):
         cursor = conn.cursor()
+        column_names = get_column_names(conn, project_name)
         self.project_name = project_name
         
         cursor.execute(f"SELECT * FROM {project_name}")
@@ -70,6 +73,18 @@ class UnionFind:
             bug_id = int(row[column_names.index("bug_id")])
             if (dup_id == bug_id): continue
             assert(dup_id != bug_id)
+            desc1 = get_descriptions(conn, project_name, bug_id)
+            desc2 = get_descriptions(conn, project_name, dup_id)
+            if (len(desc1.split(" ")) < 50 or len(desc2.split(" ")) < 50): continue
+            self.union(bug_id, dup_id)
+        self.processed = True
+    
+    def process_json_data(self, dataset, project_name):
+        for point in dataset:
+            dup_id = point["dup_id"]
+            bug_id = point["bug_id"]
+            if dup_id is None or bug_id is None: continue
+            assert(bug_id != dup_id)
             self.union(bug_id, dup_id)
         self.processed = True
             
@@ -80,6 +95,7 @@ class UnionFind:
     def get_children(self, parent):
         assert(self.processed)
         parent = self.find(parent)
+        if (parent is None): return None
         children = [key for key, value in self.parent.items() if value == parent]
         return children
     
@@ -108,19 +124,29 @@ class UnionFind:
             count += n*(n-1)/2
         print(self.project_name, "has", count, "duplicated_pairs")
         return count
+    
+    def get_dup(self,):
+        assert(self.processed)
+        
         
             
             
-def get_bug_ids(conn, table_name):
+def get_bug_ids(conn, table_name, filter=True):
     cursor = conn.cursor()
     column_name = "bug_id"
 
     # Fetch table names using SQL query
-    cursor.execute(f"SELECT DISTINCT {column_name} FROM {table_name} ORDER BY {column_name};")
+    cursor.execute(f"SELECT DISTINCT {column_name} FROM {table_name} WHERE length(description) ORDER BY {column_name};")
     distinct_values_sorted = cursor.fetchall()
 
     # Extract table names from the result
     return [value[0] for value in distinct_values_sorted]
+
+def preprocess_text(text, remove_punc=True, lowercase=True, remove_nums=True, remove_stopwords=True, ):
+    # Remove punctuations:
+    text = cleaned_text = ''.join(char for char in text if char not in string.punctuation)
+    # Lower casing:
+    
 
 
 def get_column_names(conn, table_name):
@@ -133,17 +159,6 @@ def get_column_names(conn, table_name):
     # Extract and return the column names
     column_names = [column[1] for column in columns_info]
     return column_names
-
-
-def get_code_feature(conn, project_name, bug_id):
-    cursor = conn.cursor()
-
-    # Fetch table names using SQL query
-    query = f"SELECT * FROM {project_name} WHERE bug_id = {bug_id};"
-    # print(query)
-    cursor.execute(query)
-    result = cursor.fetchall()[0]
-    return result[column_names.index("code_feature")]
 
 
 def get_descriptions(conn, project_name, bug_id):
@@ -160,6 +175,46 @@ def get_descriptions(conn, project_name, bug_id):
 
     # Extract table names from the result
     return (desc + " \n " + short_desc).replace("\\'", "'")
+
+
+def get_code_feature(conn, project_name, bug_id):
+    cursor = conn.cursor()
+
+    # Fetch table names using SQL query
+    query = f"SELECT * FROM {project_name} WHERE bug_id = {bug_id};"
+    column_names = get_column_names(conn, project_name)
+    # print(query)
+    cursor.execute(query)
+    result = cursor.fetchall()[0]
+    return result[column_names.index("code_feature")]
+
+def get_desc_wo_stacktrace(conn, project_name, bug_id):
+    cursor = conn.cursor()
+
+    # Fetch table names using SQL query
+    query = f"SELECT * FROM {project_name} WHERE bug_id = {bug_id};"
+    column_names = get_column_names(conn, project_name)
+    assert("desc_wo_stacktrace" in column_names)
+    # print(query)
+    cursor.execute(query)
+    result = cursor.fetchall()[0]
+    return result[column_names.index("short_desc")] + " " + result[column_names.index("desc_wo_stacktrace")]
+
+def get_stacktrace(conn, project_name, bug_id):
+    cursor = conn.cursor()
+
+    # Fetch table names using SQL query
+    query = f"SELECT * FROM {project_name} WHERE bug_id = {bug_id};"
+    column_names = get_column_names(conn, project_name)
+    assert("stacktrace" in column_names)
+    # print(query)
+    cursor.execute(query)
+    result = cursor.fetchall()[0]
+    return result[column_names.index("stacktrace")]
+
+def has_stacktrace
+    
+    
 
 def vectorize(description, stride_len, chunk_size):
     tokens = tokenizer.tokenize(description)
@@ -228,3 +283,118 @@ def get_mislabels(union_find, bug_ids, anchor_bug_id, threshold):
                 ret += [bug_id]
     return ret
 
+def similarity_score_1d(vector1, vector2):
+    assert(len(vector1.shape) == 1)
+    assert(len(vector2.shape) == 1)
+    assert(vector1.shape[0] == vector2.shape[0])
+    return np.dot(vector1,vector2)/(norm(vector1)*norm(vector2))
+
+def contains_only_letters_and_dots(word):
+    word = word.replace("<", "")
+    word = word.replace(">", "")
+    pattern = re.compile(r'^[a-zA-Z0-9.$:]+$')
+    return bool(pattern.match(word))
+
+def is_java_path(word):
+    word = word.strip(string.punctuation)
+    is_long = len(word) >= 10
+    has_dots = word.count('.') >= 1
+    separeted_dots = word.count("..") == 0
+    return is_long and has_dots and separeted_dots and contains_only_letters_and_dots(word)
+
+def contains_java_path(line):
+    for word in line.split(" "):
+        if is_java_path(word): return True
+    return False
+
+def java_path_is_majority(line):
+    total_java_path_length = 0
+    for word in line.split(" "):
+        if is_java_path(word): total_java_path_length += len(word)
+    return total_java_path_length / len(line) > 0.7
+
+def starts_with_java_path(line):
+    first_word = line.split(" ")[0]
+    return is_java_path(first_word)
+
+def startswith_datetime(line):
+    first_word = line.split(" ")[0]
+    match1 = re.match(r"\d+-\d+-\d+", first_word) is not None
+    match2 = re.match(r"\d+:\d+:\d+.*", first_word) is not None
+    match3 = re.match(r"\d+/\d+/\d+.*", first_word) is not None
+    return match1 or match2 or match3
+
+def startswith_allcaps(line):
+    # first_word = line.split(" ")[0]
+    # return first_word.isalpha() and len(first_word) > 2 and first_word.isupper()
+    return line.startswith("INFO ")\
+        or line.startswith("ERROR ")\
+        or line.startswith("ERRORS ")\
+        or line.startswith("WARN ")\
+        or line.startswith("WARNING ")\
+        or line.startswith("WARNINGS ")\
+            
+def startswith_label(line):
+    first_word = line.split(" ")[0]
+    pattern = re.compile(r'^\[[a-zA-Z]+\]$')
+
+    # Check if the input string matches the pattern
+    match = pattern.match(first_word)
+
+    return bool(match)
+    
+def get_tag_name(line):
+    # tag is something like this <a> <\a>
+    pattern = re.compile(r'^\s*<([a-zA-Z][^\s>]*)\s*[^>]*>')
+    match = pattern.match(line)
+    return match.group(1) if match else None
+
+def is_stacktrace_more(line):
+    match = re.match(r"... \d+ more", line.strip()) is not None
+    return match
+
+def is_stacktrace(line):
+    line = line.strip()
+    return len(line) != 0\
+            and (line.startswith("at ")\
+            or line.startswith("Caused by: ")\
+            or line.startswith("Exception in thread ")\
+            or java_path_is_majority(line)\
+            or startswith_datetime(line)\
+            or startswith_allcaps(line)\
+            or startswith_label(line)\
+            or is_stacktrace_more(line))
+
+def segregate_log_and_stacktrace(text):
+    eng = ""
+    log_and_stacktrace = ""
+    
+    for line in text.split("\n"):
+        if get_tag_name(line) is not None:
+            eng += line + "\n"
+            continue
+        if is_stacktrace(line):
+            log_and_stacktrace += line + "\n"
+        else:
+            eng += line + "\n"
+    return eng.strip(), log_and_stacktrace.strip()
+
+
+def has_log_or_stacktrace(text):
+    for line in text.split("\n"):
+        if get_tag_name(line) is not None:
+            continue
+        if is_stacktrace(line):
+            return True
+    return False
+
+def tokenize_stuctured_text(text):
+    pattern = r'\s+|[-|.,;!?()"\[\]{}:]+'
+    words = re.split(pattern, text)
+    words = [word for word in words if word]
+    return words
+
+def filter_numeric(words):
+    return [word for word in words if word.isdigit()]
+        
+       

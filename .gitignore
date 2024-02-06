@@ -1,4 +1,6 @@
 datasets*
-vectorize*
+archive/
 model*
 *db
+December/hadoop_old/*
+*.npz
