@@ -73,8 +73,8 @@ class UnionFind:
             bug_id = int(row[column_names.index("bug_id")])
             if (dup_id == bug_id): continue
             assert(dup_id != bug_id)
-            desc1 = get_descriptions(conn, project_name, bug_id)
-            desc2 = get_descriptions(conn, project_name, dup_id)
+            desc1 = get_description(conn, project_name, bug_id)
+            desc2 = get_description(conn, project_name, dup_id)
             if (len(desc1.split(" ")) < 50 or len(desc2.split(" ")) < 50): continue
             self.union(bug_id, dup_id)
         self.processed = True
@@ -146,8 +146,6 @@ def preprocess_text(text, remove_punc=True, lowercase=True, remove_nums=True, re
     # Remove punctuations:
     text = cleaned_text = ''.join(char for char in text if char not in string.punctuation)
     # Lower casing:
-    
-
 
 def get_column_names(conn, table_name):
     cursor = conn.cursor()
@@ -161,7 +159,7 @@ def get_column_names(conn, table_name):
     return column_names
 
 
-def get_descriptions(conn, project_name, bug_id):
+def get_description(conn, project_name, bug_id):
     cursor = conn.cursor()
 
     # Fetch table names using SQL query
@@ -171,10 +169,25 @@ def get_descriptions(conn, project_name, bug_id):
     cursor.execute(query)
     result = cursor.fetchall()[0]
     desc = result[column_names.index("description")]
+    # short_desc = result[column_names.index("short_desc")]
+
+    # Extract table names from the result
+    # return (desc + " \n ").replace("\\'", "'")
+    return desc.replace("\\'", "'")
+
+def get_short_desc(conn, project_name, bug_id):
+    cursor = conn.cursor()
+    # Fetch table names using SQL query
+    query = f"SELECT * FROM {project_name} WHERE bug_id = {bug_id};"
+    column_names = get_column_names(conn, project_name)
+    # print(query)
+    cursor.execute(query)
+    result = cursor.fetchall()[0]
+    # desc = result[column_names.index("description")]
     short_desc = result[column_names.index("short_desc")]
 
     # Extract table names from the result
-    return (desc + " \n " + short_desc).replace("\\'", "'")
+    return short_desc.replace("\\'", "'")
 
 
 def get_code_feature(conn, project_name, bug_id):
@@ -211,9 +224,6 @@ def get_stacktrace(conn, project_name, bug_id):
     cursor.execute(query)
     result = cursor.fetchall()[0]
     return result[column_names.index("stacktrace")]
-
-def has_stacktrace
-    
     
 
 def vectorize(description, stride_len, chunk_size):
@@ -398,3 +408,45 @@ def filter_numeric(words):
     return [word for word in words if word.isdigit()]
         
        
+def write_string_to_file(file_path, content):
+    try:
+        # Open the file in write mode ('w')
+        with open(file_path, 'w') as file:
+            # Write the content to the file
+            file.write(content)
+        # print(f"String has been written to {file_path}.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    
+def read_string_from_file(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            content = file.read()
+            return content
+    except FileNotFoundError:
+        print(f"Error: File '{file_path}' not found.")
+        return None
+
+def create_folder(folder_path):
+    try:
+        # Check if the folder exists
+        if not os.path.exists(folder_path):
+            # If it doesn't exist, create the folder
+            os.makedirs(folder_path)
+            print(f"Folder '{folder_path}' created.")
+        else:
+            print(f"Folder '{folder_path}' already exists.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+def delete_file(file_path):
+    try:
+        # Check if the file exists
+        if os.path.exists(file_path):
+            # If it exists, delete the file
+            os.remove(file_path)
+            print(f"File '{file_path}' deleted.")
+        else:
+            print(f"File '{file_path}' does not exist.")
+    except Exception as e:
+        print(f"An error occurred: {e}")

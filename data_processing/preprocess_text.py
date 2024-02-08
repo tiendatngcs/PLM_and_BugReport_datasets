@@ -2,25 +2,64 @@ import nltk
 import string
 
 # ======= Constants ========
+
+# CODE_SNIPPET_PATTERN = r"(?:```|'''|\"\"\")(?:[\n\s]*\w+[\n\s]*)+(?:```|'''|\"\"\")"
+CODE_SNIPPET_PATTERN = r"^```\n.*\n```$"
+
+# JAVA_CODE_PATTERNS = {
+#     "CLASS_DEF" : r'^\s*((public|private)\s*)?class\s+(\w+)(\s+extends\s+(\w+))?(\s+implements\s+([\w,\s]+))?\s+\{(\s*})?',
+#     "FUNC_DEF" : r'^\s*\w+\s*\([^)]*\)\s*\{|(public|private|protected)\s+(static|final)?\s+(\w+)\s+(\w+)\([^)]*\)',
+#     "IF" : r'^\s*if\s*\(.*\{|\w+\s*\([^)]*\)\s*\{',
+#     "OBJ" : r'^\s*\w\s*=\snew[^;]+;',
+#     "SPLIT_PUNCT" : r"^\s*([\"!#\\$%&()*+,-./:;<=>?@[\]^_'`{|}~])",
+#     # "RVM_REPEATED_PUNC" : r"^\s*([%s])\\1{1,}" % string.punctuation,
+#     "LOOP" : r"^\s*(for|while)\s*\([^)]*\)",
+# }
+
 SCALA_CODE_PATTERNS = {
-    "VAR_DEC" : r"val\s+\w+\s*=\s*.+",
-    "FUNC_DEC" : r"(def|val|var)\s+\w+\s*\(.*\)\s*:\s*.+",
-    "CLASS_DEC" : r"(class|trait|object)\s+\w+\s*.+",
-    "IMPORT" : r"import\s+.+",
-    "COMMENT" : r"//.*|/\*[\s\S]*?\*/",
-    "IF" : r"";
+    "CLASS_DEF" : r'^\s*(public|private)?\s+(class|interface|\w+)\s+(\w+)\s*({|\(.*?\))',
+    "FUNC_DEF" : r'^\s*(public|private|protected)?\s+(static|final)?\s+(\w+)\s+(\w+)\([^)]*\)',
+    "FUNC_CALL" : r"^\s*(?:.\w+(\(.*\))?)*$",
+    "IF" : r'^\s*if\s*\(.*\{|\w+\s*\([^)]*\)\s*\{',
+    "OBJ" : r'^\s*\b(\w+)\s+(\w+)\b|(val|var)\s+(\w+)\s*:(.+)',
+    "SPLIT_PUNCT" : r"^([\"!#\\$%&()*+,-./:;<=>?@[\]^_'`{|}~])",
+    # "RVM_REPEATED_PUNC" : "^([%s])\\1{1,}" % string.punctuation,
+    "LOOP" : r"^\s*(for|while)\s*\([^)]*\)",
 }
 
-JAVA_CODE_PATTERNS = {
-    "VAR_DEC" : r"(public|private|protected)?\s*(static)?\s*(final)?\s*(void|int|char|boolean|float|double|long|short|byte)\s+(\w+)\s*(=[^;]+)?;",
-    "FUNC_DEC" : r'(public|private|protected)?\s*(static)?\s*(void|int|char|boolean|float|double|long|short|byte)\s+\w+\s*\([^)]*\)\s*',
-    "CLASS_DEC" : r"(public|private|protected)?\s*(abstract|final)?\s*(class|interface)\s+\w+\s*",
-    "IMPORT" : r"import\s+.+",
-    "COMMENT" : r"//.*|/\*[\s\S]*?\*/",
-    "IF" : r'if\s*\(.*\{',
+# JAVA_TOTAL_PATTERN = r"|".join(JAVA_CODE_PATTERNS.values())
+JAVA_CODE_PATTERNS_WHOLE_LINE = {
+    "end_w_semicolon" : r"^\s*.*;\s*$",
+    "end_w_open_bracket" : r"^\s*.*({|\(|\[))\s*$",
+    "func_chain" : r"^\s*(?:.\w+(\(.*\))?)*$",
+    "close_bracket" : r"^\s*}$",
 }
 
+# PYTHON_CODE_PATTERN_WHOLE_LINE = {
+#     "import" : r"^(from [a-zA-Z0-9]+ )?import \w+(?:,\s*[a-zA-Z0-9]+)*( as [a-zA-Z0-9]+)?$",
+#     "class_func" : r"^\s*(class|def) [a-zA-Z0-9]+(\(.*\))?:\s*$",
+#     "assignment" : r"^\s*[a-zA-Z0-9]+\s*=\s*(?:.\w+(\(.*\))?)+$",
+#     "func_chain": r"^\s*(?:.\w+(\(.*\))?)*$",
+# }
 
+
+
+JAVA_TOTAL_PATTERN = r"|".join(JAVA_CODE_PATTERNS_WHOLE_LINE)
+SCALA_TOTAL_PATTERN = r"|".join(SCALA_CODE_PATTERNS.values())
+TOTAL_CODE_PATTERN = r"|".join([JAVA_TOTAL_PATTERN, SCALA_TOTAL_PATTERN])
+
+LOGGING_PATTERNS = {
+    "STARTS_W_DATETIME" : r"^\s*\d\d/\d\d/\d\d \d\d:\d\d:\d\d .*$",
+    "STARTS_W_LOG" : r"^\s*(?:FATAL|ERROR|WARN|INFO|DEBUG|TRACE|\[(?:fatal|error|warn|info|debug|trace)\]) .*$",
+    "STARTS_W_LOG_NUM" : r"^\s*\[\d+\] .*$",
+    "STARTS_W_AT" : r"^\s*(?:at|Caused by:) .*$",
+    "ERROR_EXCEPTION" : r"^\s*[^\s]*(?:Error|Exception):.*\n.*$",
+    "STARTS_W_SCALA" : r"^\s*(?:scala|spark-sql)?>\s.*$",
+    "STARTS_W_PYTHON" : r"^\s*>>>.*$",
+    "DotDotDot" : r"^\s*... \d+ (?:more|elided)",
+}
+
+COMBINED_LOGGING_PATTERNS = r"|".join(LOGGING_PATTERNS.values())
 
 # ======= Classes ========
 class ClassicalPreprocessing:
@@ -51,7 +90,7 @@ class ClassicalPreprocessing:
             if len(token) > 0:
                 cleanTokens.append(token)
 
-       return cleanTokens
+        return cleanTokens
 
 # ======= Functions ========
 def cleanDescription(desc):
@@ -105,3 +144,21 @@ def cleanDescription(desc):
         newdesc += l + '\n'
 
     return newdesc
+
+
+def separate_code(text):
+    # first we check if code snippet exists, if they exist, then just use them
+
+    java_pattern = r"((public|private|protected)\s+(static|final)?\s+(\w+)\s+(\w+)\([^)]*\)|(class|interface)\s+(\w+)|(\w+)\s+(\w+)\b|//.*?$|/\*(.|\n)*?\*/|\"(?:\\.|[^\"\\])*\"|(if|for|while)\s*\([^)]*\)|\b\d+(\.\d+)?\b)"  # Comprehensive pattern for Java code elements
+    code_blocks = re.findall(java_pattern, text, flags=re.DOTALL | re.MULTILINE)  # Match across multiple lines
+
+    natural_text_parts = re.split(java_pattern, text, flags=re.DOTALL | re.MULTILINE)  # Split based on code blocks
+
+    result = []
+    for i in range(len(natural_text_parts)):
+        if i % 2 == 0:  # Even-indexed parts are natural text
+            result.append(natural_text_parts[i].strip())
+        else:  # Odd-indexed parts are code blocks
+            result.append({"code": code_blocks[i - 1]})  # Store code blocks as dictionaries
+
+    return result

@@ -7,10 +7,11 @@ class FileViewerApp:
         self.master = master
         self.desc_folder_path           = folder_paths[0]
         self.eng_folder_path            = folder_paths[1]
-        self.logStackTrace_folder_path  = folder_paths[2]
+        self.log_folder_path  = folder_paths[2]
+        self.progress_file_path = "./log_extractor_progress.txt"
         
         self.files_list = self.get_files_list()
-        self.current_index = 0
+        self.current_index = self.load_current_index()
         
         self.selected_file_var = StringVar()
 
@@ -66,10 +67,16 @@ class FileViewerApp:
 
         self.show_current_file()
 
+         # Bind keys
+        self.master.bind("n", lambda event: self.show_next_file())
+        self.master.bind("p", lambda event: self.show_previous_file())
+        self.master.bind("s", lambda event: self.save_file())
+        self.master.bind("r", lambda event: self.reset())
+
     def get_files_list(self):
         desc_files = [f for f in os.listdir(self.desc_folder_path) if os.path.isfile(os.path.join(self.desc_folder_path, f))]
         # eng_files               = [f for f in os.listdir(self.eng_folder_path)              if os.path.isfile(os.path.join(self.eng_folder_path, f))]
-        # logStackTrace_files     = [f for f in os.listdir(self.logStackTrace_folder_path)    if os.path.isfile(os.path.join(self.logStackTrace_folder_path, f))]
+        # log_files     = [f for f in os.listdir(self.log_folder_path)    if os.path.isfile(os.path.join(self.log_folder_path, f))]
         return desc_files
 
     def show_current_file(self):
@@ -79,7 +86,7 @@ class FileViewerApp:
 
         desc_file_path = os.path.join(self.desc_folder_path, current_file)
         eng_file_path = os.path.join(self.eng_folder_path, current_file)
-        logStackTrace_file_path = os.path.join(self.logStackTrace_folder_path, current_file)
+        log_file_path = os.path.join(self.log_folder_path, current_file)
 
         with open(desc_file_path, 'r') as file:
             desc_file_content = file.read()
@@ -87,8 +94,8 @@ class FileViewerApp:
         with open(eng_file_path, 'r') as file:
             eng_file_content = file.read()
 
-        with open(logStackTrace_file_path, 'r') as file:
-            logStackTrace_file_content = file.read()
+        with open(log_file_path, 'r') as file:
+            log_file_content = file.read()
 
         self.text_area1.delete(1.0, tk.END)
         self.text_area1.insert(tk.INSERT, desc_file_content)
@@ -97,7 +104,7 @@ class FileViewerApp:
         self.text_area2.insert(tk.INSERT, eng_file_content)
 
         self.text_area3.delete(1.0, tk.END)
-        self.text_area3.insert(tk.INSERT, logStackTrace_file_content)
+        self.text_area3.insert(tk.INSERT, log_file_content)
         
         self.file_dropdown['values'] = self.files_list
         self.selected_file_var.set(current_file)
@@ -106,15 +113,35 @@ class FileViewerApp:
         progress_value = (self.current_index + 1) / total_files * 100
         self.progress_bar_var.set(progress_value)
 
+    def update_progress(self,):
+        # if not os.path.exists(self.progress_file_path):
+        with open(self.progress_file_path, 'w') as file:
+            # Write the content to the file
+            file.write(self.current_index)
+    
+    def load_current_index(self,):
+        # load the number saved in progress file 
+        progress = 0
+        if not os.path.exists(self.progress_file_path):
+            return progress
+        with open(self.progress_file_path, 'r') as file:
+            line = file.readline()
+            if line == "":
+                return 0
+            progress = int(line.split()[0])
+        return progress
+        
     def show_previous_file(self):
         if self.current_index > 0:
             self.current_index -= 1
             self.show_current_file()
+            self.update_progress()
 
     def show_next_file(self):
         if self.current_index < len(self.files_list) - 1:
             self.current_index += 1
             self.show_current_file()
+            self.update_progress()
             
     def reset(self):
         assert(self.files_list)
@@ -123,7 +150,7 @@ class FileViewerApp:
 
         desc_file_path = os.path.join(self.desc_folder_path, current_file)
         eng_file_path = os.path.join(self.eng_folder_path, current_file)
-        logStackTrace_file_path = os.path.join(self.logStackTrace_folder_path, current_file)
+        log_file_path = os.path.join(self.log_folder_path, current_file)
 
         with open(desc_file_path, 'r') as file:
             desc_file_content = file.read()
@@ -135,26 +162,26 @@ class FileViewerApp:
         self.text_area2.insert(tk.INSERT, desc_file_content)
 
         self.text_area3.delete(1.0, tk.END)
-        # self.text_area3.insert(tk.INSERT, logStackTrace_file_content)
+        # self.text_area3.insert(tk.INSERT, log_file_content)
         
         self.file_dropdown['values'] = self.files_list
         self.selected_file_var.set(current_file)
     
     def save_file(self):
-        # save the current content of the eng and logStackTrace text area to files
+        # save the current content of the eng and log text area to files
         eng_content = self.text_area2.get("1.0", tk.END)
-        logStackTrace_content = self.text_area3.get("1.0", tk.END)
+        log_content = self.text_area3.get("1.0", tk.END)
         
         current_file = self.files_list[self.current_index]
         
         eng_file_path = os.path.join(self.eng_folder_path, current_file)
-        logStackTrace_file_path = os.path.join(self.logStackTrace_folder_path, current_file)
+        log_file_path = os.path.join(self.log_folder_path, current_file)
         
         with open(eng_file_path, 'w') as file:
             file.write(eng_content)
 
-        with open(logStackTrace_file_path, 'w') as file:
-            file.write(logStackTrace_content)
+        with open(log_file_path, 'w') as file:
+            file.write(log_content)
 
         
     def load_selected_file(self, event):
@@ -165,22 +192,24 @@ class FileViewerApp:
             self.show_current_file()
 
 if __name__ == "__main__":
-    
-    project_name = "./spark"
+    folder = "/home/grads/t/tiendat.ng.cs/github_repos/PLM_and_BugReport_datasets/datasets/hand-gen-datasets"
+    project_name = "spark"
+
+    project_path = os.path.join(folder, project_name)
     
     desc_folder_name = "desc"
     eng_folder_name = "eng"
-    logStackTrace_folder_name = "logStackTrace"
+    log_folder_name = "log"
     
-    desc_folder_path = os.path.join(project_name, desc_folder_name)
-    eng_folder_path = os.path.join(project_name, eng_folder_name)
-    logStackTrace_folder_path = os.path.join(project_name, logStackTrace_folder_name)
+    desc_folder_path = os.path.join(project_path, desc_folder_name)
+    eng_folder_path = os.path.join(project_path, eng_folder_name)
+    log_folder_path = os.path.join(project_path, log_folder_name)
     
     # folder_path = "your_folder_path_here"  # Replace with the path to your folder
 
     root = tk.Tk()
     root.title("File Viewer")
 
-    app = FileViewerApp(root, (desc_folder_path, eng_folder_path, logStackTrace_folder_path))
+    app = FileViewerApp(root, (desc_folder_path, eng_folder_path, log_folder_path))
 
     root.mainloop()
